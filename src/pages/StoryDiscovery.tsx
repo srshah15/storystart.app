@@ -22,6 +22,13 @@ const StoryDiscovery = () => {
   const [responses, setResponses] = useState<string[]>([]);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
 
+  const WORD_LIMIT = 150;
+
+  // Function to count words
+  const countWords = (text) => {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  };
+
   // Parse questions when component mounts
   useEffect(() => {
     if (generatedQuestions) {
@@ -49,9 +56,14 @@ const StoryDiscovery = () => {
   }, [responses, updateQuestionResponses]);
 
   const handleResponseChange = (index: number, value: string) => {
-    const newResponses = [...responses];
-    newResponses[index] = value;
-    setResponses(newResponses);
+    const wordCount = countWords(value);
+    
+    // Only update if within word limit
+    if (wordCount <= WORD_LIMIT) {
+      const newResponses = [...responses];
+      newResponses[index] = value;
+      setResponses(newResponses);
+    }
   };
 
   const goToQuestion = (index: number) => {
@@ -113,6 +125,8 @@ const StoryDiscovery = () => {
 
   const currentQuestion = questions[currentQuestionIndex];
   const currentResponse = responses[currentQuestionIndex] || '';
+  const currentWordCount = countWords(currentResponse);
+  const isAtWordLimit = currentWordCount >= WORD_LIMIT;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -126,7 +140,7 @@ const StoryDiscovery = () => {
         </div>
         <p className="text-xl text-gray-600 mb-2">Reflect on your experiences to uncover your unique stories</p>
         <p className="text-sm text-gray-500">
-          Take your time with each question. The more thoughtful your responses, the better your essay ideas will be.
+          Take your time with each question. Keep responses focused and under {WORD_LIMIT} words.
         </p>
       </div>
 
@@ -186,10 +200,24 @@ const StoryDiscovery = () => {
             <textarea
               value={currentResponse}
               onChange={(e) => handleResponseChange(currentQuestionIndex, e.target.value)}
-              placeholder="Share your story here... Be specific about what happened, how you felt, what you learned, and how it changed you."
+              placeholder="Share your story here... Be specific and concise."
               className="w-full h-40 p-4 border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-700"
               rows={6}
             />
+            
+            {/* Word Count Display */}
+            <div className="flex justify-between items-center mt-2 mb-4">
+              <div className={`text-sm font-medium ${
+                isAtWordLimit ? 'text-red-600' : currentWordCount > WORD_LIMIT * 0.8 ? 'text-orange-600' : 'text-gray-500'
+              }`}>
+                {currentWordCount} / {WORD_LIMIT} words
+              </div>
+              {isAtWordLimit && (
+                <div className="text-sm text-red-600 font-medium">
+                  Word limit reached
+                </div>
+              )}
+            </div>
             
             {/* Writing Tips */}
             <div className="mt-4 p-4 bg-blue-50 rounded-lg">
@@ -198,10 +226,10 @@ const StoryDiscovery = () => {
                 <div>
                   <p className="text-sm font-medium text-blue-900 mb-1">Writing Tips:</p>
                   <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• Be specific - use concrete details, names, and examples</li>
-                    <li>• Focus on your emotions and thoughts in the moment</li>
-                    <li>• Explain what you learned and how you grew from the experience</li>
-                    <li>• Don't worry about perfect writing - focus on authentic storytelling</li>
+                    <li>• Be specific and concrete - avoid general statements</li>
+                    <li>• Focus on one key moment or experience</li>
+                    <li>• Include your emotions and what you learned</li>
+                    <li>• Keep it focused - quality over quantity</li>
                   </ul>
                 </div>
               </div>
