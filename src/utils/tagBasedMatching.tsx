@@ -1,15 +1,7 @@
+// FIXED: Enhanced system with better tag matching and coverage
+
 import { PROMPTS_DATA } from '../data/prompts.tsx';
 
-// 1. Extract all unique tags from prompts data
-const extractAllTags = (promptsData) => {
-  const allTags = new Set();
-  promptsData.essays.forEach(essay => {
-    essay.tags.forEach(tag => allTags.add(tag));
-  });
-  return Array.from(allTags).sort();
-};
-
-// All available tags from the prompts JSON
 const ALL_TAGS = [
   "academic", "activities", "background", "balance", "challenge-belief", 
   "collaboration", "communication", "community", "contribution", "curiosity", 
@@ -17,196 +9,505 @@ const ALL_TAGS = [
   "gratitude", "growth", "history", "identity", "impact", "influence", 
   "initiative", "innovation", "leadership", "open", "passion", "personal", 
   "reflection", "relationships", "resilience", "self-awareness", "service", 
-  "society", "values", "vision", "why_this_school"
+  "society", "values", "vision", "why_this_school", "culture", "engagement",
+  "self-discovery", "motivation", "challenge"
 ];
 
-// 2. Updated system prompt for AI essay generation
-const createEssayGenerationPrompt = (profileData, questionResponses, generatedQuestions) => {
-  const systemPrompt = `You are an expert college admissions counselor who helps students craft compelling, specific college essays that stand out.
+// School name normalization to handle variations
+const normalizeSchoolName = (schoolName) => {
+  const normalizations = {
+    'ucla': 'UCLA',
+    'uc berkeley': 'UC Berkeley',
+    'berkeley': 'UC Berkeley',
+    'usc': 'USC',
+    'nyu': 'NYU',
+    'northwestern': 'Northwestern',
+    'unc chapel-hill': 'UNC Chapel-Hill',
+    'unc': 'UNC Chapel-Hill',
+    'cornell': 'Cornell',
+    'dartmouth': 'Dartmouth',
+    'brown': 'Brown'
+  };
+  
+  const lower = schoolName.toLowerCase().trim();
+  return normalizations[lower] || schoolName;
+};
 
-CRITICAL: Generate essay ideas that are SPECIFIC, CONCRETE, and STORY-DRIVEN. Avoid generic themes.
+// 1. Enhanced prompt analysis with tag prioritization
+const analyzeRequiredPrompts = (targetColleges, promptsData = PROMPTS_DATA) => {
+  console.log('Analyzing required prompts for:', targetColleges);
+  
+  const normalizedTargets = targetColleges.map(normalizeSchoolName);
+  console.log('Normalized targets:', normalizedTargets);
+  
+  const requiredPrompts = promptsData.essays.filter(prompt => {
+    if (prompt.school === 'Common App') return prompt.required;
+    
+    const isTargetSchool = normalizedTargets.some(target => {
+      const targetLower = target.toLowerCase();
+      const schoolLower = prompt.school.toLowerCase();
+      
+      return targetLower === schoolLower || 
+             targetLower.includes(schoolLower) || 
+             schoolLower.includes(targetLower);
+    });
+    
+    return isTargetSchool && prompt.required;
+  });
 
-STORY STRUCTURE REQUIREMENTS:
-Each essay MUST follow this narrative structure:
-1. **Specific Moment/Scene**: Start with a concrete moment in time (not a general experience)
-2. **Challenge/Conflict**: What specific problem, dilemma, or obstacle occurred?
-3. **Action Taken**: What did the student specifically DO (not just think or feel)?
-4. **Outcome/Change**: What tangible result occurred?
-5. **Insight/Growth**: What specific lesson or realization emerged?
+  console.log(`Found ${requiredPrompts.length} required prompts`);
+  
+  // Extract all unique tags from required prompts
+  const allRequiredTags = [...new Set(requiredPrompts.flatMap(p => p.tags))];
+  console.log('Required tags to cover:', allRequiredTags);
 
-STORY FOCUS GUIDELINES:
-- Choose ONE specific incident, conversation, decision, or moment
-- Include sensory details, dialogue, or specific actions the student took
-- Focus on situations where the student was an active participant, not passive observer
-- Show character through specific actions and decisions
-- Reveal growth through concrete before/after comparisons
+  // Create tag priority map based on frequency
+  const tagFrequency = {};
+  requiredPrompts.forEach(prompt => {
+    prompt.tags.forEach(tag => {
+      tagFrequency[tag] = (tagFrequency[tag] || 0) + 1;
+    });
+  });
 
-AVOID THESE WEAK APPROACHES:
-❌ "Reflect on your leadership journey" (too broad)
-❌ "Describe how you've grown" (too vague)
-❌ "Talk about your passion for X" (lacks specificity)
-❌ Generic challenges everyone faces
+  // Sort tags by frequency (more common = higher priority)
+  const prioritizedTags = allRequiredTags.sort((a, b) => tagFrequency[b] - tagFrequency[a]);
+  
+  return {
+    requiredPrompts,
+    allRequiredTags,
+    prioritizedTags,
+    tagFrequency,
+    minEssaysNeeded: Math.max(12, Math.ceil(requiredPrompts.length * 0.8))
+  };
+};
 
-PREFER THESE STRONG APPROACHES:
-✅ "The moment you had to choose between following team tradition or standing up for a new player"
-✅ "The day your environmental project failed spectacularly and what you did next"
-✅ "The conversation that changed how you view your cultural identity"
-✅ "The 30 seconds that taught you what leadership really means"
+// 2. FIXED: Create targeted prompts that ensure strong tag matching
+const createTagFocusedPrompt = (profileData, questionResponses, requiredPrompts, iteration = 1) => {
+  const uncoveredPrompts = requiredPrompts.filter(p => !p.covered);
+  const priorityTags = [...new Set(uncoveredPrompts.flatMap(p => p.tags))];
+  
+  // Separate school-specific and Common App prompts
+  const schoolSpecificPrompts = uncoveredPrompts.filter(p => p.school !== 'Common App');
+  const commonAppPrompts = uncoveredPrompts.filter(p => p.school === 'Common App');
+  
+  console.log(`Uncovered: ${schoolSpecificPrompts.length} school-specific, ${commonAppPrompts.length} Common App`);
+  
+  // Prioritize school-specific prompts if they exist
+  const targetPrompts = schoolSpecificPrompts.length > 0 ? schoolSpecificPrompts : uncoveredPrompts;
+  
+  // Group uncovered prompts by their primary tags for targeted generation
+  const tagGroups = {};
+  targetPrompts.forEach(prompt => {
+    prompt.tags.forEach(tag => {
+      if (!tagGroups[tag]) tagGroups[tag] = [];
+      tagGroups[tag].push(prompt);
+    });
+  });
 
-STORY FOCUS FORMAT:
-Write 2-3 sentences that include:
-- The specific setting/context
-- The exact moment or decision point
-- What stakes were involved
-- What action the student took
+  // Sort tags by how many uncovered prompts they could help with
+  const sortedTags = Object.keys(tagGroups).sort((a, b) => tagGroups[b].length - tagGroups[a].length);
+  const topPriorityTags = sortedTags.slice(0, Math.min(8, sortedTags.length));
 
-Example: "During the final debate tournament, when your research revealed a flaw in your own team's argument 10 minutes before going on stage, you made the difficult decision to rebuild your case from scratch rather than proceed with faulty logic, risking your team's chances but upholding your commitment to intellectual integrity."
+  const systemPrompt = `You are an expert college admissions counselor creating essay ideas with MANDATORY TAG COVERAGE.
 
-KEY MESSAGE REQUIREMENTS:
-- Must connect to the student's future goals or character
-- Should reveal a specific quality colleges want (intellectual curiosity, resilience, leadership, empathy, etc.)
-- Must go beyond the obvious lesson to show deeper insight
-- Should connect to the student's intended major or career interests when possible
+CRITICAL MISSION: Create essays that match SCHOOL-SPECIFIC supplemental prompts, not just Common App essays.
 
-TAGS TO USE: ${ALL_TAGS.join(', ')}
+${schoolSpecificPrompts.length > 0 ? `
+🎯 PRIORITY: Focus on these SCHOOL-SPECIFIC prompts:
+${schoolSpecificPrompts.slice(0, 6).map(p => `${p.school}: "${p.prompt}" (Tags: ${p.tags.join(', ')})`).join('\n')}
 
-For each essay idea, provide:
+These school-specific essays should demonstrate clear fit and knowledge of the specific institution.
+` : ''}
 
-## Essay Idea #[X]: [Specific, Action-Oriented Title]
-**Topic/Theme:** [One sentence describing the core theme]
-**Specific Story:** [2-3 detailed sentences following the story focus format above - include the exact moment, setting, conflict, and action taken]
-**Key Message:** [The deeper insight or character trait this reveals, connected to their goals]
-**Why It Works:** [How this story demonstrates college-readiness and unique perspective]
-**Tags:** [2-4 relevant tags from the provided list]
+REQUIREMENTS:
+1. Every essay MUST target 2-4 specific tags from this list: ${priorityTags.join(', ')}
+2. Essays MUST strongly demonstrate their assigned tags through specific actions
+3. NO generic essays - each must connect to specific prompts
+4. For school-specific prompts, show knowledge of that particular institution
 
-ENSURE VARIETY:
-- Mix different settings (school, home, community, work, etc.)
-- Include different types of challenges (interpersonal, intellectual, ethical, practical)
-- Show different aspects of character (leadership, curiosity, resilience, empathy, etc.)
-- Connect to different parts of their profile (activities, values, background, goals)
+${iteration > 1 ? `
+ITERATION ${iteration} - FILLING GAPS
+Still need to cover: ${targetPrompts.slice(0, 5).map(p => `${p.school}: ${p.tags.join(', ')}`).join(' | ')}
+` : ''}
 
-Generate stories that admissions officers will remember because they reveal character through specific, vivid moments of growth and decision-making.`;
+STORY REQUIREMENTS:
+- Specific moment in time with clear setting
+- Concrete challenge/conflict and actions taken  
+- Measurable outcomes and personal growth
+- Authentic demonstration of assigned tags
+
+Format each essay as:
+
+## Essay Idea: [Specific Action-Based Title]
+**Target Tags:** [2-4 tags that match uncovered prompts]
+**Story Outline:** [Detailed story: moment, challenge, actions, outcome]
+**Tag Connection:** [How this story specifically demonstrates each tag]
+**Key Insight:** [Personal growth/learning]
+
+Generate ${Math.min(6, Math.max(3, Math.ceil(targetPrompts.length / 2)))} essays prioritizing school-specific prompt coverage.`;
 
   const userPrompt = `STUDENT PROFILE:
 Target Colleges: ${profileData.colleges.join(', ')}
-Intended Major: ${profileData.major}
-Background: ${profileData.background.join(', ')}
-Activities: ${profileData.activities.map(a => `${a.name} (${a.hours}hrs/week): ${a.description}`).join(' | ')}
-Awards: ${profileData.awards.map(a => `${a.name} (${a.level}): ${a.description}`).join(' | ')}
-Values: ${profileData.personalValues.join(', ')}
-Personality: ${profileData.personalityTraits.join(', ')}
-Learning Style: ${profileData.learningStyle}
-Leadership Style: ${profileData.leadershipStyle}
-Motivations: ${profileData.motivations.join(', ')}
-Social Impact Areas: ${profileData.socialImpactAreas.join(', ')}
+Major: ${profileData.major}
+Background: ${profileData.background?.join(', ') || 'Not specified'}
+Activities: ${profileData.activities?.map(a => `${a.name}: ${a.description}`).join(' | ') || 'Not specified'}
+Values: ${profileData.personalValues?.join(', ') || 'Not specified'}
 
-REFLECTION QUESTIONS AND RESPONSES:
-${questionResponses.map((response, index) => {
-  const questionLines = generatedQuestions.split('\n').filter(line => line.trim());
-  const questionText = questionLines[index] ? questionLines[index].replace(/^\d+\.\s*/, '') : `Question ${index + 1}`;
-  return `Q${index + 1}: ${questionText}\nA${index + 1}: ${response}`;
-}).join('\n\n')}
+HIGHEST PRIORITY - SCHOOL-SPECIFIC PROMPTS TO COVER:
+${schoolSpecificPrompts.slice(0, 8).map(p => `${p.school}: "${p.prompt}" (Needs tags: ${p.tags.join(', ')})`).join('\n')}
 
-Based on this information, generate 4-5 compelling essay ideas. Each should focus on ONE specific moment or decision that reveals character. Make the stories vivid, concrete, and memorable.`;
+${commonAppPrompts.length > 0 ? `
+ALSO COVER - COMMON APP PROMPTS:
+${commonAppPrompts.slice(0, 4).map(p => `"${p.prompt}" (Needs tags: ${p.tags.join(', ')})`).join('\n')}
+` : ''}
+
+FOCUS TAGS: ${topPriorityTags.join(', ')}
+
+Create essays that specifically address the school supplemental prompts above. Show genuine interest in each specific institution.`;
 
   return { systemPrompt, userPrompt };
 };
 
-// 3. Parse AI response and extract tags
-const parseStrategicEssaysWithTags = (essayText, targetColleges = []) => {
+// 3. ENHANCED: Better parsing with asterisk removal and stricter tag validation
+const parseTagFocusedEssays = (essayText, targetColleges = []) => {
   if (!essayText) return [];
-
-  // Split by essay sections
-  const essayMatches = essayText.match(/## Essay Idea #\d+:.*?(?=## Essay Idea #\d+:|$)/gs);
   
-  if (!essayMatches) return [];
+  console.log('Parsing essay text length:', essayText.length);
 
-  return essayMatches.map((section, index) => {
-    console.log(`Processing section ${index + 1}:`, section);
+  // Multiple regex patterns to catch different formats
+  const essayMatches = essayText.match(/## Essay Idea:.*?(?=## Essay Idea:|$)/gs) ||
+                      essayText.match(/##\s*Essay Idea.*?(?=##\s*Essay Idea|$)/gs) ||
+                      essayText.match(/Essay Idea:.*?(?=Essay Idea:|$)/gs);
+  
+  if (!essayMatches) {
+    console.log('No essay matches found');
+    return [];
+  }
+
+  console.log(`Found ${essayMatches.length} essay matches`);
+
+  const parsedEssays = essayMatches.map((section, index) => {
+    // FIXED: Remove asterisks and clean title
+    const titleMatch = section.match(/(?:## )?Essay Idea:?\s*(.+?)(?=\n|$)/);
+    const rawTitle = titleMatch ? titleMatch[1].trim() : `Essay Idea ${index + 1}`;
+    const cleanTitle = rawTitle.replace(/\*+/g, '').replace(/[""]/g, '').trim();
     
-    // Extract title
-    const titleMatch = section.match(/## Essay Idea #\d+:\s*(.+?)(?=\n|$)/);
-    const title = titleMatch ? titleMatch[1].trim() : `Essay Idea ${index + 1}`;
-    
-    // Extract theme
-    const themeMatch = section.match(/\*\*Topic\/Theme:\*\*\s*(.+?)(?=\n|$)/);
-    const theme = themeMatch ? themeMatch[1].trim() : 'Personal Growth';
-    
-    // Extract specific story
-    const storyMatch = section.match(/\*\*Specific Story:\*\*\s*(.+?)(?=\n\*\*|$)/s);
+    const storyMatch = section.match(/\*\*Story Outline:\*\*\s*(.+?)(?=\n\*\*|$)/s);
     const storyFocus = storyMatch ? storyMatch[1].trim() : '';
     
-    // Extract key message
-    const messageMatch = section.match(/\*\*Key Message:\*\*\s*(.+?)(?=\n\*\*|$)/s);
-    const keyMessage = messageMatch ? messageMatch[1].trim() : '';
+    const connectionMatch = section.match(/\*\*Tag Connection:\*\*\s*(.+?)(?=\n\*\*|$)/s);
+    const tagConnection = connectionMatch ? connectionMatch[1].trim() : '';
     
-    // Extract why it works
-    const whyMatch = section.match(/\*\*Why It Works:\*\*\s*(.+?)(?=\n\*\*|$)/s);
-    const whyItWorks = whyMatch ? whyMatch[1].trim() : '';
+    const insightMatch = section.match(/\*\*Key Insight:\*\*\s*(.+?)(?=\n\*\*|$)/s);
+    const keyMessage = insightMatch ? insightMatch[1].trim() : '';
     
-    // Extract tags - THIS IS THE KEY NEW PART
-    const tagsMatch = section.match(/\*\*Tags:\*\*\s*(.+?)(?=\n|$)/);
+    // ENHANCED: Better tag extraction and validation
+    const tagsMatch = section.match(/\*\*Target Tags:\*\*\s*(.+?)(?=\n|$)/);
     const essayTags = tagsMatch ? 
-      tagsMatch[1].split(',').map(tag => tag.trim().toLowerCase()) : [];
+      tagsMatch[1].split(/[,;]/).map(tag => tag.trim().toLowerCase().replace(/[^\w-_]/g, '')) : [];
     
-    // Validate tags against our known tags
-    const validTags = essayTags.filter(tag => 
-      ALL_TAGS.map(t => t.toLowerCase()).includes(tag)
-    );
+    // STRICT: Only include tags that exist in our master list
+    const validTags = essayTags.filter(tag => {
+      const normalizedTag = tag.replace(/[^\w-_]/g, '');
+      return ALL_TAGS.map(t => t.toLowerCase()).includes(normalizedTag);
+    });
+
+    console.log(`Essay "${cleanTitle}": raw_tags=[${essayTags.join(', ')}] valid_tags=[${validTags.join(', ')}]`);
+
+    // CRITICAL: Only return essays with valid tag connections
+    if (validTags.length === 0) {
+      console.log(`REJECTED: "${cleanTitle}" - no valid tags`);
+      return null;
+    }
+
+    const coveredPrompts = findMatchingPrompts(validTags, targetColleges);
     
-    console.log(`Essay ${index + 1} tags:`, validTags);
+    // ENHANCED: Require at least one prompt match
+    if (coveredPrompts.length === 0) {
+      console.log(`REJECTED: "${cleanTitle}" - no matching prompts`);
+      return null;
+    }
 
     return {
       id: `essay_${index + 1}`,
-      title,
-      theme,
+      title: cleanTitle,
       storyFocus,
+      tagConnection,
       keyMessage,
-      whyItWorks,
-      tags: validTags, // AI-assigned tags
-      coveredPrompts: findMatchingPrompts(validTags, targetColleges), // Computed prompt matches
-      fullContent: section,
-      estimatedWordCount: '500-650 words'
+      tags: validTags,
+      coveredPrompts,
+      fullContent: section
     };
-  });
+  }).filter(essay => essay !== null);
+
+  console.log(`Successfully parsed ${parsedEssays.length} essays with valid tags`);
+  return parsedEssays;
 };
 
-// 4. Map essay tags to matching prompts
-const findMatchingPrompts = (essayTags, targetColleges = [], promptsData = PROMPTS_DATA) => {
-  return promptsData.essays
-    .filter(prompt => {
-      // First filter by relevant schools
-      const isRelevantSchool = prompt.school === 'Common App' || targetColleges.includes(prompt.school);
+// 4. ENHANCED: Improved iterative generation with coverage tracking
+const generateEssayIdeasWithGuaranteedCoverage = async (profileData, questionResponses, generatedQuestions) => {
+  console.log('=== STARTING TAG-FOCUSED GENERATION ===');
+  console.log('Target colleges:', profileData.colleges);
+  
+  const { requiredPrompts, prioritizedTags, minEssaysNeeded } = analyzeRequiredPrompts(profileData.colleges);
+  console.log(`Target: ${requiredPrompts.length} required prompts, generating ${minEssaysNeeded}+ essays`);
+  console.log('Priority tags:', prioritizedTags.slice(0, 10));
+
+  let allEssays = [];
+  let iteration = 1;
+  const maxIterations = 5;
+  let promptsCovered = new Set();
+
+  while (iteration <= maxIterations) {
+    console.log(`\n--- ITERATION ${iteration} ---`);
+    
+    // Mark which prompts are already covered
+    const updatedPrompts = requiredPrompts.map(prompt => ({
+      ...prompt,
+      covered: promptsCovered.has(prompt.id)
+    }));
+    
+    const uncoveredCount = updatedPrompts.filter(p => !p.covered).length;
+    const coveragePercent = Math.round(((requiredPrompts.length - uncoveredCount) / requiredPrompts.length) * 100);
+    
+    console.log(`Coverage: ${coveragePercent}% (${uncoveredCount} prompts remaining)`);
+    
+    if (uncoveredCount === 0) {
+      console.log('✅ 100% COVERAGE ACHIEVED!');
+      break;
+    }
+
+    // Generate essays targeting uncovered prompts
+    const { systemPrompt, userPrompt } = createTagFocusedPrompt(
+      profileData, 
+      questionResponses, 
+      updatedPrompts,
+      iteration
+    );
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7 + (iteration * 0.05), // Slightly more creative each iteration
+          max_tokens: 2500
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const newIdeas = data.choices[0].message.content;
       
-      // Then check if essay tags overlap with prompt tags
-      const hasMatchingTags = prompt.tags.some(promptTag => 
-        essayTags.includes(promptTag.toLowerCase())
+      // Parse with enhanced validation
+      const newEssays = parseTagFocusedEssays(newIdeas, profileData.colleges);
+      console.log(`Generated ${newEssays.length} valid essays`);
+      
+      // Add essays and track new coverage
+      newEssays.forEach((newEssay, index) => {
+        // Check for duplicates
+        const isDuplicate = allEssays.some(existing => 
+          similarity(existing.title.toLowerCase(), newEssay.title.toLowerCase()) > 0.75
+        );
+        
+        if (!isDuplicate) {
+          newEssay.id = `essay_${allEssays.length + 1}_i${iteration}`;
+          allEssays.push(newEssay);
+          
+          // Track newly covered prompts
+          newEssay.coveredPrompts.forEach(promptId => promptsCovered.add(promptId));
+          
+          console.log(`✓ Added: "${newEssay.title}" (tags: ${newEssay.tags.join(', ')}, covers: ${newEssay.coveredPrompts.length} prompts)`);
+        } else {
+          console.log(`⚠ Skipped duplicate: "${newEssay.title}"`);
+        }
+      });
+
+    } catch (error) {
+      console.error(`Iteration ${iteration} failed:`, error);
+      break;
+    }
+
+    iteration++;
+  }
+
+  // Final coverage analysis
+  const finalCoverage = analyzePromptCoverage(allEssays, profileData.colleges);
+  
+  console.log('=== FINAL RESULTS ===');
+  console.log(`Generated: ${allEssays.length} essays`);
+  console.log(`Coverage: ${finalCoverage.coveragePercentage}%`);
+  console.log(`Strong tag connections: ${allEssays.every(e => e.tags.length > 0)}`);
+
+  return {
+    success: true,
+    essays: allEssays,
+    coverage: finalCoverage,
+    iterations: iteration - 1,
+    guaranteedCoverage: finalCoverage.coveragePercentage >= 85
+  };
+};
+
+// Helper functions (keeping existing ones)
+const similarity = (str1, str2) => {
+  const longer = str1.length > str2.length ? str1 : str2;
+  const shorter = str1.length > str2.length ? str2 : str1;
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+};
+
+const levenshteinDistance = (str1, str2) => {
+  const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(0));
+  
+  for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
+  for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
+  
+  for (let j = 1; j <= str2.length; j++) {
+    for (let i = 1; i <= str1.length; i++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1,
+        matrix[j - 1][i] + 1,
+        matrix[j - 1][i - 1] + cost
+      );
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+};
+
+const findMatchingPrompts = (essayTags, targetColleges = [], promptsData = PROMPTS_DATA) => {
+  if (!essayTags || essayTags.length === 0) {
+    console.log('No essay tags provided');
+    return [];
+  }
+  
+  const normalizedTargets = targetColleges.map(normalizeSchoolName);
+  console.log('🔍 Finding matches for tags:', essayTags);
+  console.log('🎓 Target colleges:', normalizedTargets);
+  console.log('📝 Total prompts in database:', promptsData.essays.length);
+  
+  // First, let's see what schools are actually in the database
+  const allSchools = [...new Set(promptsData.essays.map(p => p.school))];
+  console.log('🏫 Schools in database:', allSchools);
+  
+  const matchingPrompts = promptsData.essays.filter(prompt => {
+    // Always include Common App prompts for required essays
+    if (prompt.school === 'Common App' && prompt.required) {
+      // Check tag match for Common App
+      const normalizedEssayTags = essayTags.map(tag => tag.toLowerCase().trim());
+      const normalizedPromptTags = prompt.tags.map(tag => tag.toLowerCase().trim());
+      
+      const hasMatchingTags = normalizedPromptTags.some(promptTag => 
+        normalizedEssayTags.includes(promptTag)
       );
       
-      return isRelevantSchool && hasMatchingTags;
-    })
-    .map(prompt => prompt.id);
-};
-
-// 5. Analyze coverage and gaps
-const analyzePromptCoverage = (essays, targetColleges, promptsData = PROMPTS_DATA) => {
-  // Get all required prompts for target colleges
-  const relevantPrompts = promptsData.essays.filter(prompt =>
-    (prompt.school === 'Common App' || targetColleges.includes(prompt.school)) && prompt.required
-  );
-  
-  // Get all covered prompts
-  const coveredPromptIds = new Set();
-  essays.forEach(essay => {
-    essay.coveredPrompts.forEach(promptId => coveredPromptIds.add(promptId));
+      if (hasMatchingTags) {
+        console.log(`✅ Common App match: ${prompt.prompt.substring(0, 50)}... | Tags: [${normalizedPromptTags.join(', ')}]`);
+      }
+      
+      return hasMatchingTags;
+    }
+    
+    // For school-specific prompts, check if school matches
+    const isTargetSchool = normalizedTargets.some(target => {
+      const targetLower = target.toLowerCase().trim();
+      const schoolLower = prompt.school.toLowerCase().trim();
+      
+      // Try multiple matching strategies
+      const exactMatch = targetLower === schoolLower;
+      const targetContainsSchool = targetLower.includes(schoolLower);
+      const schoolContainsTarget = schoolLower.includes(targetLower);
+      
+      // Special handling for common abbreviations
+      const abbreviationMatch = (
+        (targetLower === 'nyu' && schoolLower === 'new york university') ||
+        (targetLower === 'new york university' && schoolLower === 'nyu') ||
+        (targetLower === 'usc' && schoolLower === 'university of southern california') ||
+        (targetLower === 'ucla' && schoolLower === 'university of california los angeles') ||
+        (targetLower === 'uc berkeley' && schoolLower === 'university of california berkeley') ||
+        (targetLower === 'northwestern' && schoolLower.includes('northwestern')) ||
+        (targetLower.includes('northwestern') && schoolLower === 'northwestern')
+      );
+      
+      const isMatch = exactMatch || targetContainsSchool || schoolContainsTarget || abbreviationMatch;
+      
+      if (isMatch) {
+        console.log(`🏫 School match found: "${target}" <-> "${prompt.school}"`);
+      }
+      
+      return isMatch;
+    });
+    
+    if (!isTargetSchool) {
+      return false;
+    }
+    
+    // Check for tag matches (case-insensitive) for school-specific prompts
+    const normalizedEssayTags = essayTags.map(tag => tag.toLowerCase().trim());
+    const normalizedPromptTags = prompt.tags.map(tag => tag.toLowerCase().trim());
+    
+    const hasMatchingTags = normalizedPromptTags.some(promptTag => 
+      normalizedEssayTags.includes(promptTag)
+    );
+    
+    if (hasMatchingTags) {
+      console.log(`✅ ${prompt.school} match: ${prompt.prompt.substring(0, 50)}... | Essay tags: [${normalizedEssayTags.join(', ')}] | Prompt tags: [${normalizedPromptTags.join(', ')}]`);
+    } else {
+      console.log(`❌ ${prompt.school} NO match: Essay tags: [${normalizedEssayTags.join(', ')}] | Prompt tags: [${normalizedPromptTags.join(', ')}]`);
+    }
+    
+    return hasMatchingTags;
   });
   
-  // Find uncovered prompts
+  console.log(`🎯 Found ${matchingPrompts.length} total matching prompts`);
+  matchingPrompts.forEach(prompt => {
+    console.log(`   - ${prompt.school}: ${prompt.prompt.substring(0, 50)}...`);
+  });
+  
+  return matchingPrompts.map(prompt => prompt.id);
+};
+
+const analyzePromptCoverage = (essays, targetColleges, promptsData = PROMPTS_DATA) => {
+  const normalizedTargets = targetColleges.map(normalizeSchoolName);
+  
+  const relevantPrompts = promptsData.essays.filter(prompt => {
+    if (prompt.school === 'Common App') return prompt.required;
+    
+    const isTargetSchool = normalizedTargets.some(target => {
+      const targetLower = target.toLowerCase();
+      const schoolLower = prompt.school.toLowerCase();
+      
+      return targetLower === schoolLower || 
+             targetLower.includes(schoolLower) || 
+             schoolLower.includes(targetLower);
+    });
+    
+    return isTargetSchool && prompt.required;
+  });
+  
+  const coveredPromptIds = new Set();
+  essays.forEach(essay => {
+    if (essay.coveredPrompts) {
+      essay.coveredPrompts.forEach(promptId => coveredPromptIds.add(promptId));
+    }
+  });
+  
   const uncoveredPrompts = relevantPrompts.filter(prompt => 
     !coveredPromptIds.has(prompt.id)
   );
   
-  // Calculate coverage percentage
   const coveragePercentage = relevantPrompts.length > 0 ? 
     Math.round(((relevantPrompts.length - uncoveredPrompts.length) / relevantPrompts.length) * 100) : 100;
   
@@ -218,120 +519,11 @@ const analyzePromptCoverage = (essays, targetColleges, promptsData = PROMPTS_DAT
   };
 };
 
-// 6. Enhanced tag-to-prompt debugging
-const debugTagMatching = (essay, promptsData = PROMPTS_DATA) => {
-  console.log(`\n=== TAG MATCHING DEBUG for "${essay.title}" ===`);
-  console.log('Essay tags:', essay.tags);
-  
-  essay.coveredPrompts.forEach(promptId => {
-    const prompt = promptsData.essays.find(p => p.id === promptId);
-    if (prompt) {
-      const matchingTags = prompt.tags.filter(tag => 
-        essay.tags.includes(tag.toLowerCase())
-      );
-      console.log(`✓ Matches ${prompt.school} - ${prompt.id}:`);
-      console.log(`  Prompt tags: ${prompt.tags.join(', ')}`);
-      console.log(`  Matching tags: ${matchingTags.join(', ')}`);
-    }
-  });
-  
-  console.log(`Total prompts covered: ${essay.coveredPrompts.length}`);
-};
-
-// 7. Updated StoryContext integration
-const generateEssayIdeasWithTags = async (profileData, questionResponses, generatedQuestions) => {
-  console.log('=== GENERATING ESSAY IDEAS WITH TAGS ===');
-  
-  const { systemPrompt, userPrompt } = createEssayGenerationPrompt(
-    profileData, 
-    questionResponses, 
-    generatedQuestions
-  );
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1500
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const ideas = data.choices[0].message.content;
-    
-    console.log('=== RAW AI RESPONSE ===');
-    console.log(ideas);
-    
-    // Parse with new tag-based system
-    const parsedEssays = parseStrategicEssaysWithTags(ideas, profileData.colleges);
-    
-    // Debug each essay's tag matching
-    parsedEssays.forEach(essay => debugTagMatching(essay));
-    
-    // Analyze overall coverage
-    const coverage = analyzePromptCoverage(parsedEssays, profileData.colleges);
-    console.log('=== COVERAGE ANALYSIS ===');
-    console.log(`Coverage: ${coverage.coveragePercentage}%`);
-    console.log(`Covered: ${coverage.coveredPrompts.length} prompts`);
-    console.log(`Gaps: ${coverage.uncoveredPrompts.length} prompts`);
-    
-    return {
-      success: true,
-      essays: parsedEssays,
-      coverage: coverage,
-      rawResponse: ideas
-    };
-
-  } catch (error) {
-    console.error('Error generating essay ideas:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// 8. Mock data for testing with tags
-const MOCK_ESSAY_IDEAS_WITH_TAGS = `## Essay Idea #1: The Algorithm That Taught Me Empathy
-**Topic/Theme:** How debugging a coding project revealed the importance of understanding different perspectives
-**Specific Story:** Your experience troubleshooting a collaborative coding project where technical solutions weren't enough - you had to understand your teammates' different approaches and communication styles
-**Key Message:** Technical skills are enhanced by emotional intelligence and collaborative problem-solving
-**Why It Works:** Shows intellectual curiosity, growth mindset, and leadership potential
-**Tags:** academic, collaboration, communication, growth
-
-## Essay Idea #2: From Debate Stage to Community Garden
-**Topic/Theme:** How competitive debate skills translated into grassroots community organizing
-**Specific Story:** Using research and persuasion techniques from debate to rally community support for a local environmental initiative
-**Key Message:** Academic skills have real-world applications in creating positive change
-**Why It Works:** Demonstrates civic engagement, practical application of learning, and environmental consciousness
-**Tags:** community, service, leadership, initiative
-
-## Essay Idea #3: The Art of Productive Failure
-**Topic/Theme:** Learning to embrace failure as a learning tool through your journey with robotics
-**Specific Story:** A particular moment of failure in robotics competition and how you systematically learned from it
-**Key Message:** Resilience and analytical thinking are more valuable than perfection
-**Why It Works:** Shows maturity, self-reflection, and growth mindset that colleges value
-**Tags:** resilience, growth, reflection, challenge-belief`;
-
-// Export for use in components
 export {
   ALL_TAGS,
-  createEssayGenerationPrompt,
-  parseStrategicEssaysWithTags,
+  analyzeRequiredPrompts,
+  generateEssayIdeasWithGuaranteedCoverage,
+  parseTagFocusedEssays as parseStrategicEssaysWithTags,
   findMatchingPrompts,
-  analyzePromptCoverage,
-  debugTagMatching,
-  generateEssayIdeasWithTags,
-  MOCK_ESSAY_IDEAS_WITH_TAGS
+  analyzePromptCoverage
 };
