@@ -22,30 +22,70 @@ const ALL_TAGS = [
 
 // 2. Updated system prompt for AI essay generation
 const createEssayGenerationPrompt = (profileData, questionResponses, generatedQuestions) => {
-  const systemPrompt = `You are an expert college admissions counselor who helps students craft compelling college essays.
+  const systemPrompt = `You are an expert college admissions counselor who helps students craft compelling, specific college essays that stand out.
 
-Given a student's profile data and their responses to reflection questions, generate 3-5 specific, concrete essay ideas that would make strong college application essays.
+CRITICAL: Generate essay ideas that are SPECIFIC, CONCRETE, and STORY-DRIVEN. Avoid generic themes.
 
-For each essay idea, you MUST include a "Tags" field that lists which essay themes this story would best address from this list:
+STORY STRUCTURE REQUIREMENTS:
+Each essay MUST follow this narrative structure:
+1. **Specific Moment/Scene**: Start with a concrete moment in time (not a general experience)
+2. **Challenge/Conflict**: What specific problem, dilemma, or obstacle occurred?
+3. **Action Taken**: What did the student specifically DO (not just think or feel)?
+4. **Outcome/Change**: What tangible result occurred?
+5. **Insight/Growth**: What specific lesson or realization emerged?
 
-AVAILABLE TAGS: ${ALL_TAGS.join(', ')}
+STORY FOCUS GUIDELINES:
+- Choose ONE specific incident, conversation, decision, or moment
+- Include sensory details, dialogue, or specific actions the student took
+- Focus on situations where the student was an active participant, not passive observer
+- Show character through specific actions and decisions
+- Reveal growth through concrete before/after comparisons
+
+AVOID THESE WEAK APPROACHES:
+❌ "Reflect on your leadership journey" (too broad)
+❌ "Describe how you've grown" (too vague)
+❌ "Talk about your passion for X" (lacks specificity)
+❌ Generic challenges everyone faces
+
+PREFER THESE STRONG APPROACHES:
+✅ "The moment you had to choose between following team tradition or standing up for a new player"
+✅ "The day your environmental project failed spectacularly and what you did next"
+✅ "The conversation that changed how you view your cultural identity"
+✅ "The 30 seconds that taught you what leadership really means"
+
+STORY FOCUS FORMAT:
+Write 2-3 sentences that include:
+- The specific setting/context
+- The exact moment or decision point
+- What stakes were involved
+- What action the student took
+
+Example: "During the final debate tournament, when your research revealed a flaw in your own team's argument 10 minutes before going on stage, you made the difficult decision to rebuild your case from scratch rather than proceed with faulty logic, risking your team's chances but upholding your commitment to intellectual integrity."
+
+KEY MESSAGE REQUIREMENTS:
+- Must connect to the student's future goals or character
+- Should reveal a specific quality colleges want (intellectual curiosity, resilience, leadership, empathy, etc.)
+- Must go beyond the obvious lesson to show deeper insight
+- Should connect to the student's intended major or career interests when possible
+
+TAGS TO USE: ${ALL_TAGS.join(', ')}
 
 For each essay idea, provide:
-1. A clear essay topic/theme
-2. The specific story/experience to focus on
-3. Key message or insight to convey
-4. Why this story showcases their unique qualities
-5. **Tags: 2-4 tags from the available list that this essay best addresses**
 
-Format each idea like this:
-## Essay Idea #1: [Title]
-**Topic/Theme:** [Theme description]
-**Specific Story:** [Detailed story focus]
-**Key Message:** [Core message/insight]
-**Why It Works:** [Why this showcases student's qualities]
-**Tags:** tag1, tag2, tag3
+## Essay Idea #[X]: [Specific, Action-Oriented Title]
+**Topic/Theme:** [One sentence describing the core theme]
+**Specific Story:** [2-3 detailed sentences following the story focus format above - include the exact moment, setting, conflict, and action taken]
+**Key Message:** [The deeper insight or character trait this reveals, connected to their goals]
+**Why It Works:** [How this story demonstrates college-readiness and unique perspective]
+**Tags:** [2-4 relevant tags from the provided list]
 
-Focus on authentic, personal stories that reveal character growth, values in action, intellectual curiosity, and unique perspectives.`;
+ENSURE VARIETY:
+- Mix different settings (school, home, community, work, etc.)
+- Include different types of challenges (interpersonal, intellectual, ethical, practical)
+- Show different aspects of character (leadership, curiosity, resilience, empathy, etc.)
+- Connect to different parts of their profile (activities, values, background, goals)
+
+Generate stories that admissions officers will remember because they reveal character through specific, vivid moments of growth and decision-making.`;
 
   const userPrompt = `STUDENT PROFILE:
 Target Colleges: ${profileData.colleges.join(', ')}
@@ -67,13 +107,13 @@ ${questionResponses.map((response, index) => {
   return `Q${index + 1}: ${questionText}\nA${index + 1}: ${response}`;
 }).join('\n\n')}
 
-Based on this comprehensive information, please generate 3-5 compelling college essay ideas with detailed explanations and appropriate tags for each.`;
+Based on this information, generate 4-5 compelling essay ideas. Each should focus on ONE specific moment or decision that reveals character. Make the stories vivid, concrete, and memorable.`;
 
   return { systemPrompt, userPrompt };
 };
 
 // 3. Parse AI response and extract tags
-const parseStrategicEssaysWithTags = (essayText) => {
+const parseStrategicEssaysWithTags = (essayText, targetColleges = []) => {
   if (!essayText) return [];
 
   // Split by essay sections
@@ -124,7 +164,7 @@ const parseStrategicEssaysWithTags = (essayText) => {
       keyMessage,
       whyItWorks,
       tags: validTags, // AI-assigned tags
-      coveredPrompts: findMatchingPrompts(validTags), // Computed prompt matches
+      coveredPrompts: findMatchingPrompts(validTags, targetColleges), // Computed prompt matches
       fullContent: section,
       estimatedWordCount: '500-650 words'
     };
@@ -132,13 +172,18 @@ const parseStrategicEssaysWithTags = (essayText) => {
 };
 
 // 4. Map essay tags to matching prompts
-const findMatchingPrompts = (essayTags, promptsData = PROMPTS_DATA) => {
+const findMatchingPrompts = (essayTags, targetColleges = [], promptsData = PROMPTS_DATA) => {
   return promptsData.essays
     .filter(prompt => {
-      // Check if essay tags overlap with prompt tags
-      return prompt.tags.some(promptTag => 
+      // First filter by relevant schools
+      const isRelevantSchool = prompt.school === 'Common App' || targetColleges.includes(prompt.school);
+      
+      // Then check if essay tags overlap with prompt tags
+      const hasMatchingTags = prompt.tags.some(promptTag => 
         essayTags.includes(promptTag.toLowerCase())
       );
+      
+      return isRelevantSchool && hasMatchingTags;
     })
     .map(prompt => prompt.id);
 };
@@ -232,7 +277,7 @@ const generateEssayIdeasWithTags = async (profileData, questionResponses, genera
     console.log(ideas);
     
     // Parse with new tag-based system
-    const parsedEssays = parseStrategicEssaysWithTags(ideas);
+    const parsedEssays = parseStrategicEssaysWithTags(ideas, profileData.colleges);
     
     // Debug each essay's tag matching
     parsedEssays.forEach(essay => debugTagMatching(essay));
