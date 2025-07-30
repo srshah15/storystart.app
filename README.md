@@ -2,8 +2,6 @@
 
 StoryStart is a React + TypeScript web application that helps high school students discover meaningful and personalized college essay ideas using AI.
 
-**Live Site:** [storystart.app](www.storystart.app)
-
 ## Features
 
 - Profile creation with academic background, activities, awards, and personal insights
@@ -60,10 +58,3 @@ VITE_APP_NAME=StoryStart
 VITE_APP_VERSION=1.0.0
 ```
 
-## Deployment
-
-This app is currently deployed at:
-
-[storystart.app](www.storystart.app)
-
-It can also be deployed to platforms like Netlify, GitHub Pages, or AWS.
