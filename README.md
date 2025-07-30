@@ -2,8 +2,6 @@
 
 StoryStart is a React + TypeScript web application that helps high school students discover meaningful and personalized college essay ideas using AI.
 
-**Live Site:** [https://storystartapp.vercel.app](https://storystartapp.vercel.app)
-
 ## Features
 
 - Profile creation with academic background, activities, awards, and personal insights
@@ -64,6 +62,6 @@ VITE_APP_VERSION=1.0.0
 
 This app is currently deployed at:
 
-[https://storystartapp.vercel.app](https://storystartapp.vercel.app)
+[storystart.app](storystart.app)
 
 It can also be deployed to platforms like Netlify, GitHub Pages, or AWS.
