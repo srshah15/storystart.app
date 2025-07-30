@@ -4,6 +4,7 @@ import ProfileForm from './pages/ProfileForm';
 import StoryDiscovery from './pages/StoryDiscovery';
 import StoryResults from './pages/StoryResults';
 
+
 // Protected Route Component - prevents access if requirements aren't met
 const ProtectedRoute = ({ 
   children, 

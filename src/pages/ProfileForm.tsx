@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Upload, GraduationCap, GripVertical, X, Plus, Heart, Loader2 } from 'lucide-react';
+import { Upload, GraduationCap, GripVertical, X, Plus, Heart, Loader2, Zap } from 'lucide-react';
 
 // All your existing constants
 const COLLEGES = [
@@ -91,7 +91,14 @@ const COMMUNICATION_PREFERENCES = [
 
 const ProfileForm = () => {
   const navigate = useNavigate();
-  const { profileData, updateProfileData, isProfileComplete, generateQuestions } = useStoryContext();
+  const { 
+    profileData, 
+    updateProfileData, 
+    isProfileComplete, 
+    generateQuestions,
+    skipToDiscovery,
+    skipToResults
+  } = useStoryContext();
   
   // Local state for form handling
   const [isGenerating, setIsGenerating] = useState(false);
@@ -252,8 +259,50 @@ const ProfileForm = () => {
     }
   };
 
+  const handleSkipToDiscovery = () => {
+    skipToDiscovery();
+    navigate('/discovery');
+  };
+
+  const handleSkipToResults = () => {
+    skipToResults();
+    navigate('/results');
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
+      {/* Testing Skip Controls */}
+      {/*
+      <Card className="p-4 mb-6 bg-yellow-50 border-yellow-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-yellow-600" />
+            <span className="font-medium text-yellow-800">Development Mode</span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSkipToDiscovery}
+              className="text-yellow-700 border-yellow-300 hover:bg-yellow-100"
+            >
+              Skip to Discovery
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSkipToResults}
+              className="text-yellow-700 border-yellow-300 hover:bg-yellow-100"
+            >
+              Skip to Results
+            </Button>
+          </div>
+        </div>
+        <p className="text-sm text-yellow-700 mt-2">
+          Use these buttons to test navigation without using API tokens
+        </p>
+      </Card>
+      */}
       {/* Header */}
       <div className="text-center mb-12">
         <div className="flex items-center justify-center gap-2 mb-4">
