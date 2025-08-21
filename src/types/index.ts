@@ -27,7 +27,6 @@ export interface StudentProfile {
   activities: Activity[];
   awards: Award[];
   hobbies: Hobby[];
-  uploadedPhoto: File | null;
 }
 
 // Types for story generation
@@ -62,7 +61,6 @@ export interface StudentProfile {
   activities: Activity[];
   awards: Award[];
   hobbies: Hobby[];
-  uploadedPhoto: File | null;
   
   // New personal insights fields
   personalValues?: string[];

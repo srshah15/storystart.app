@@ -37,8 +37,6 @@ interface ProfileData {
   socialImpactAreas: string[];
   groupRole: string;
   communicationPreference: string;
-  uploadedPhoto?: File | null;
-  photoPreview?: string | null;
 }
 
 // Updated interface for generation metadata
@@ -195,8 +193,6 @@ export const StoryProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     socialImpactAreas: [],
     groupRole: '',
     communicationPreference: '',
-    uploadedPhoto: null,
-    photoPreview: null,
   });
 
   // Completion states
@@ -287,7 +283,7 @@ Please generate 5-7 specific, thoughtful questions to help this student discover
           'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: 'gpt-4.1',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
