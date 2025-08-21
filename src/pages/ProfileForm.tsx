@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Upload, GraduationCap, GripVertical, X, Plus, Heart, Loader2, Zap } from 'lucide-react';
+import { GraduationCap, GripVertical, X, Plus, Heart, Loader2, Zap } from 'lucide-react';
 
 // All your existing constants
 const COLLEGES = [
